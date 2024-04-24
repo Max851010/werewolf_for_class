@@ -15,8 +15,24 @@
 
 ### def broadcast
 
-1.  we switch players[player][1] to details[1] (details[1] stands for the socket of the player)
+we switch players[player][1] to details[1] (details[1] stands for the socket of the player)
 
 ### def send
 
-1. 
+we encode the message by utf-8 and send it through the client socket rather than pip
+
+### def recv
+
+we receive the message through the client socket and decode it by utf-8
+
+## In client.py
+
+### def connect_to_server
+
+connect to server through the server socket and set it as non-blocking socket. If fail to connect to server, then print the error message
+
+## def listen
+
+entering a infinity while loop to recevie and print every message from the server
+
+## def send
