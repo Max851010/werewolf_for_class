@@ -31,8 +31,8 @@ we receive the message through the client socket and decode it by utf-8
 
 connect to server through the server socket and set it as non-blocking socket. If fail to connect to server, then print the error message
 
-## def listen
+### def listen
 
 entering a infinity while loop to recevie and print every message from the server
 
-## def send
+### def send
