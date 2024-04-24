@@ -1,7 +1,7 @@
-## Werewolf using epoll()
-# In Communication.py
+# Werewolf using epoll()
+## In Communication.py
 
-## def handleConnections
+### def handleConnections
 
 1. We first create a socket for server which represent as server socket. when a client attempts to connect to the server, this server socket accepts this connection request and creates a new socket for that client. This new socket is used for subsequent communication with that client (such as receiving and sending data). Each client will have a new socket corresponding to it.
 2. Then we create a dictionary called ‘connections’ to record every client’s file descriptor and their corresponding socket
