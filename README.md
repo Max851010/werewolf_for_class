@@ -36,3 +36,10 @@ connect to server through the server socket and set it as non-blocking socket. I
 entering a infinity while loop to recevie and print every message from the server
 
 ### def send
+
+1. check if whether sys.stdin is ready to write, if yes, then try to read the starndard input and send it to the server.
+2. if the input text is 'exit', then close the connection
+
+### main
+
+use def connect_to_server to connect to server, then entering an while loop to keep track message from server and user's input text
