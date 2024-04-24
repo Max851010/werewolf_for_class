@@ -13,6 +13,6 @@
    - Otherwise, if the data we receive is ‘ ‘, means the connection is closed. Then we would close the corresponding socket and remove it from epoll
 5. Finally, when the server is closed, we remove server socket from epoll and close the server socket.
 
-## def broadcast
+### def broadcast
 
 1.  we switch players[player][1] to details[1] (details[1] stands for the socket of the player)
