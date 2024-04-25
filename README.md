@@ -27,11 +27,11 @@
 
 ### def broadcast
 
-we switch from using players[player][1] to all players' socket, and use sock.send to broadcast a message to every player's socket
+traverse all players' socket, and use sock.send to broadcast a message to every player's socket
 
 ### def send
 
-we encode the message by utf-8 and send it through the client socket
+encode the message by utf-8 and send it through the input client socket
 
 ### def recv
 
