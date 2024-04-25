@@ -27,7 +27,7 @@
 
 ### def broadcast
 
-we switch players[player][1] to details[1] (details[1] stands for the socket of the player)
+we switch from using players[player][1] to all players' socket, and use sock.send to broadcast a message to every player's socket
 
 ### def send
 
