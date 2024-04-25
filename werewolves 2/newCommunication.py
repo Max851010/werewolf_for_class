@@ -359,8 +359,8 @@ def vote(voter, target):
     # Code Updated on 7/20 by Tim
     if voter_targets.get(voter, None) == None:  # Added line
 
-        target = int(target)
-        if target in targets:
+        unicode_targets = [unicode(t) for t in targets]
+        if target in unicode_targets:
             try: votes[target] += 1  # changed from += 1 to just 1
             except: votes[target] = 1
             #message[0] is sent to who[0]; message[1] sent to who[1]; etc.
@@ -404,12 +404,12 @@ def vote(voter, target):
     else:
         send('You already voted: %s'%str(target), voters[voter])
 
-def spawnDeathSpeech(player, endtime):
+def spawnDeathSpeech(player, players, endtime):
     global deathspeech, deadGuy
     deathspeech = 1
     deadGuy = player
 
-    sleep(endtime)
+    groupChat(players, endtime)
 
     deathspeech = 0
     deadGuy = ""

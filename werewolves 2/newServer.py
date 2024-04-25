@@ -89,11 +89,12 @@ def removePlayer(player):
 
     c.setLogChat(1)
     if giveDeathSpeech:
-        c.broadcast('These are %ss last words.' % player, newAll)
-        c.send("Share your parting words.", all[player][1])
+        c.broadcast('These are %s\'s last words.' % str(player), newAll)
+        c.send("Share your parting words.", all[player])
+        c.spawnDeathSpeech(player, all, deathspeechtime)
     c.setLogChat(0)
 
-    c.send("YOU ARE DEAD. You will continue getting game updates, Please *DO NOT* close this terminal", all[player][1])
+    c.send("YOU ARE DEAD. You will continue getting game updates, Please *DO NOT* close this terminal", all[player])
 
     all = newAll
     wolves = newWolves
@@ -124,7 +125,7 @@ signal.signal(signal.SIGINT, quitGame)
 
 def assign():
     global all, wolves, townspeople, witch, moderatorAssignment, moderatorAssignmentContinue, moderatorAssignmentList, moderatorAssignmentChoices
-    from communication import send  # Ensure 'send' is compatible and available
+    from newCommunication import send  # Ensure 'send' is compatible and available
 
     numPlayers = len(all.keys())
 
@@ -230,10 +231,11 @@ def standardTurn():
             if wolfkill:
                 validKills = [p for p in all if p != wolfvote[0]]
                 witchmoves = validKills + ['Heal', 'Pass'] if potions[1] else validKills
-                c.send('Witch, wake up. The wolves killed %s. Valid votes are %s.' % (str(wolfvote[0]), str(witchmoves)), witch[witchPlayer][1])
+                c.send('Witch, wake up. The wolves killed %s. Valid votes are %s.' % (str(wolfvote[0]), str(witchmoves)), witch[witchPlayer])
+                witchvotetime = 9
                 witchVote, voteType = c.poll(witch, witchvotetime, witchmoves, 'witch', all, 0, 0)
                 if witchVote == ['Heal']:
-                    c.send('The Witch healed you!', all[wolfvote[0]][1])
+                    c.send('The Witch healed you!\n', all[int(wolfvote[0])])
                     potions[1] -= 1
                     wolfkill = 0
                 elif witchVote != ['Pass']:
@@ -244,23 +246,25 @@ def standardTurn():
         c.allow(all)
         if wolfkill:
             c.broadcast('The werewolves ate %s!' % wolfvote[0], all)
-            removePlayer(wolfvote[0])
+            removePlayer(int(wolfvote[0]))
         if witchkill:
             c.broadcast('The Witch poisoned %s! %d poison[s] remaining.' % (witchVote[0], potions[0]), all)
-            removePlayer(witchVote[0])
+            removePlayer(int(witchVote[0]))
 
         if len(wolves) == 0 or len(wolves) == len(all):
             return 1
 
         c.broadcast('It is day. Everyone, open your eyes. You have %d seconds to discuss who the werewolves are.' % towntalktime, all)
+        towntalktime = 9
         c.groupChat(all, towntalktime)
         #time.sleep(towntalktime)  # Controlled wait for discussion
 
+        townvotetime = 9
         c.broadcast('Townspeople, you have %d seconds to cast your votes on who to hang. Valid votes are %s' % (townvotetime, str(sorted(all.keys()))), all)
         killedPlayer, voteType = c.poll(all, townvotetime, all.keys(), 'town', all, i['townUnanimous'], i['townSilentVote'])
         if voteType == 0:
-            c.broadcast('The town voted to hang %s!' % killedPlayer[0], all)
-            removePlayer(killedPlayer[0])
+            c.broadcast('The town voted to hang %s!' % str(killedPlayer[0]), all)
+            removePlayer(int(killedPlayer[0]))
 
         return 1
     except Exception as error:
