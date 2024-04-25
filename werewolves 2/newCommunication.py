@@ -44,6 +44,9 @@ readVulnerability = 1
 readVulnerability_2 = 1
 imposterMode = 1
 isSilent = 1
+stop_chat = type('StopChat', (object,), {'stop': False})()
+
+
 def setVars(passedReadVulnerability, passedReadVulnerability_2,passedImposterMode, publicLogName, moderatorLogName):
     #descriptions of these variables can be seen in the config file
     global readVulnerability, readVulnerability_2,imposterMode, logName, mLogName
@@ -97,7 +100,7 @@ import select
 import random
 import time
 
-def setup_server_socket(port=9999, max_connections=10):
+def setup_server_socket(port=9999, max_connections=100):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind(('localhost', port))
@@ -169,18 +172,15 @@ def handleConnections(timeTillStart, randomize):
 
 ###############################
 
-def broadcast(msg, players):
-    """Broadcast a message to multiple clients."""
-    log(msg, 1, logChat, 1)  # Log the message being broadcast
-    time.sleep(0.1)  # Small delay to prevent spam
-
-    for player, details in players.items():
+def broadcast(message, players_sockets):
+    """
+    Send a message to all clients except the sender.
+    """
+    for sock in players_sockets.values():
         try:
-            #send(msg, details[1])  # Assuming details[1] is the socket
-            send(msg, details)  # Assuming details[1] is the socket
+            sock.send(message.encode('utf-8'))
         except Exception as e:
-            print 'broadcast error: %s' % str(e)  # Optional: log this error
-
+            print("Broadcast failed to", sock, "with error", e)
 
 def send(msg, client_socket):
     """Send a message to the client through the socket."""
@@ -190,23 +190,23 @@ def send(msg, client_socket):
 
     try:
         # Prepare message in a format suitable for sending
-        msg = ':' + 'sender' + ':' + msg + '\n'
+        #msg = ':' + 'sender' + ':' + msg + '\n'
         client_socket.sendall(msg.encode('utf-8'))
     except Exception as e:
         print 'send error: %s' % str(e)
 
 def recv(client_socket):
-    """Receive a message from the client through the socket."""
+    """
+    Receive data from the socket. The data is decoded from UTF-8 to Unicode.
+    """
     try:
-        output = client_socket.recv(1024).decode('utf-8').split('\n')
-        for i in range(len(output)):
-            if len(output[i]) > 0:
-                parts = output[i].split(':')
-                # Assuming part[1] would be 's' from the protocol you might be using
-                if parts[1] == 's' or imposterMode == 1:
-                    return parts
-    except Exception as e:
-        print 'receive error: %s' % str(e)
+        data = client_socket.recv(1024)  # Adjust buffer size as needed
+        if not data:
+            return None  # No data received, possibly connection is closed
+        return data.decode('utf-8')  # Decode from UTF-8 to Unicode string
+    except socket.error as e:
+        print "Socket error:", e
+        return None
 
 
 #print, publicLog, modLog
@@ -239,60 +239,59 @@ import socket
 import select
 import time
 
-# Assuming the rest of communication.py is defined here, including necessary globals and functions
-
-def multiRecv(player_socket, players_sockets):
+def multiRecv(player_socket, players_sockets, player_id, toVote=False):
     """
-    Handle received messages from a player, process based on game state.
+    Process incoming messages from a specific player's socket.
     """
-    while True:
-        try:
-            msg = recv(player_socket)
-            if msg is None:
-                continue
-
-            # Finding the player identifier from the socket
-            player = [key for key, value in players_sockets.items() if value == player_socket][0]
-
-            # Death speech handling
-            if deathspeech and player == deadGuy:
-                broadcast('%s-%s' % (player, msg), modPlayers(player, players_sockets))
-
-            # Voting handling
-            elif votetime and player in voters:
-                vote(player, msg)
-
-            # Group chat handling
-            elif player in allowed:
-                broadcast('%s-%s' % (player, msg), modPlayers(player, allowed))
-
-            # Prevent spam
-            else:
-                time.sleep(1)
-        except Exception as e:
-            print 'Error in multiRecv:', str(e)
-            break
-
-def groupChat(players_sockets):
-    """
-    Initialize group chat without threads, using epoll to handle multiple receivers.
-    """
-    epoll = select.epoll()
-    for sock in players_sockets.values():
-        epoll.register(sock.fileno(), select.EPOLLIN)
+    global deathspeech, deadGuy, voters, allowed  # Assuming these are globally defined
     
     try:
-        while True:
-            events = epoll.poll(1)
-            for fileno, event in events:
-                if event & select.EPOLLIN:
-                    sock = next((s for s in players_sockets.values() if s.fileno() == fileno), None)
-                    if sock:
-                        multiRecv(sock, players_sockets)
+        message = recv(player_socket)  # Assumes recv handles decoding
+        if message:
+            if deathspeech and player_id == deadGuy:
+                print str(player_id), "'s deathspeech: ", message
+                broadcast("%s-%s" % (player_id, message), modPlayers(player_id, players_sockets))
+            elif (toVote==True) or (votetime and player_id in voters):
+                print str(player_id), "votes", message
+                vote(player_id, message)
+            elif player_id in allowed:
+                print "allowed msg: %s" % message
+                broadcast("%s-%s" % (player_id, message), modPlayers(player_id, players_sockets))
+            else:
+                print "Else msg: ", message
+    except Exception as e:
+        print "Error handling message for %s: %s" % (player_id, e)
+
+def groupChat(players_sockets, chat_duration, toVote=False):
+    """
+    Handle group chat using select for efficient I/O multiplexing, with time control.
+    """
+    global stop_chat
+    print "Group Chat started"
+    sockets_list = list(players_sockets.values())
+    player_ids = {sock.fileno(): player_id for player_id, sock in players_sockets.items()}
+    start_time = time.time()
+
+    try:
+        while (time.time() - start_time) < chat_duration:
+            read_sockets, _, _ = select.select(sockets_list, [], [], 0.1)
+
+            for notified_socket in read_sockets:
+                player_id = player_ids[notified_socket.fileno()]
+                if toVote:
+                    multiRecv(notified_socket, players_sockets, player_id, True)
+                else:
+                    multiRecv(notified_socket, players_sockets, player_id, False)
+
     finally:
-        for sock in players_sockets.values():
-            epoll.unregister(sock.fileno())
-        epoll.close()
+        print "Chat session ended."
+
+def close_groupChat():
+    """
+    Signal to close the group chat using the global stop_chat variable.
+    """
+    global stop_chat
+    stop_chat.stop = True
 
 def modPlayers(exclude_player, players_sockets):
     """
@@ -325,11 +324,12 @@ def poll(passedVoters, duration, passedValidTargets, passedCharacter, everyone, 
 
     voter_targets = {}
 
-    sleep(duration + 1)
+    #sleep(duration + 1)
     log(str(votes), 1, logChat, 1)
 
     results = []
     mode = 0
+    groupChat(passedVoters, duration + 1, True)
     for v in votes.keys():
         if votes[v] > mode:
             mode = votes[v]
@@ -359,6 +359,7 @@ def vote(voter, target):
     # Code Updated on 7/20 by Tim
     if voter_targets.get(voter, None) == None:  # Added line
 
+        target = int(target)
         if target in targets:
             try: votes[target] += 1  # changed from += 1 to just 1
             except: votes[target] = 1
@@ -366,14 +367,14 @@ def vote(voter, target):
             messages = []
             who = []
 
-            log(voter + " voted for " + target, 1, 0, 1)
+            log(str(voter) + " voted for " + str(target), 1, 0, 1)
 
             if character == "witch":
                 messages.append("Witch voted")
                 who.append(all)
             elif character == "wolf":
                 if isSilent: messages.append('%s voted.'%voter)
-                else: messages.append('%s voted for %s'%(voter, target))
+                else: messages.append('%s voted for %s'%(voter, str(target)))
                 #messages.append("Wolf vote received.")
                 who.append(voters)
 
@@ -383,7 +384,7 @@ def vote(voter, target):
                 #who.append(complement(voters,all))
             else:#townsperson vote
                 if isSilent: messages.append('%s voted.'%voter)
-                else: messages.append('%s voted for %s'%(voter, target))
+                else: messages.append('%s voted for %s'%(voter, str(target)))
                 who.append(all)
 
             for i in range(len(messages)):
@@ -397,11 +398,11 @@ def vote(voter, target):
 
         else:
             #vote_targets[voter] = None  # Added by Tim
-            send('invalid vote: %s'%target, voters[voter][1])
+            send('invalid vote: %s'%str(target), voters[voter])
 
     # Added by Tim    
     else:
-        send('You already voted: %s'%target, voters[voter][1])
+        send('You already voted: %s'%str(target), voters[voter])
 
 def spawnDeathSpeech(player, endtime):
     global deathspeech, deadGuy

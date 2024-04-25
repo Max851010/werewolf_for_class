@@ -8,6 +8,7 @@ def connect_to_server(host='localhost', port=9999):
     try:
         client_socket.connect((host, port))
         client_socket.setblocking(0)  # Set the socket to non-blocking
+        client_socket.sendall("connect")
         return client_socket
     except socket.error as e:
         print "Failed to connect to the server:", e
@@ -16,30 +17,33 @@ def connect_to_server(host='localhost', port=9999):
 def listen(server_socket):
     """ Check for messages from the server """
     try:
-        ready_to_read, _, _ = select.select([server_socket], [], [], 0.5)
-        if server_socket in ready_to_read:
-            data = server_socket.recv(1024).decode()
-            if not data:
-                print "Connection closed by the server."
-                return False
-            else:
-                print data
-        return True
+        while True:
+            ready_to_read, _, _ = select.select([server_socket], [], [], 0.5)
+            if server_socket in ready_to_read:
+                data = server_socket.recv(1024).decode()
+                if not data:
+                    print "Connection closed by the server."
+                    return False
+                else:
+                    print data
+            return True
     except Exception as e:
         print "Error receiving data:", e
         return False
 
 def send(server_socket):
-    """ Send a message entered by the user """
+    """Send a message entered by the user."""
     try:
-        msg = sys.stdin.readline().strip()  # Read a line from stdin without blocking the program
-        if msg:
-            server_socket.sendall(msg.encode())
-            if msg.lower() == 'exit':
-                return False
+        ready_to_write, _, _ = select.select([sys.stdin], [], [], 0.1)
+        if ready_to_write:
+            msg = sys.stdin.readline().strip()  # Read a line from stdin without blocking the program
+            if msg:
+                server_socket.sendall(msg.encode())
+                if msg.lower() == 'exit':
+                    return False
         return True
     except Exception as e:
-        print "Error sending data:", e
+        print("Error sending data:", e)
         return False
 
 if __name__ == '__main__':

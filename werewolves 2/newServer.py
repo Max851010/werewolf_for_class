@@ -116,7 +116,7 @@ def quitGame(signal, frame):
     finally:
         # Ensure all sockets are closed properly
         for player, details in all.items():
-            details[1].close()  # Assuming details[1] is the socket
+            details.close()  # Assuming details[1] is the socket
         sys.exit()
 
 
@@ -197,13 +197,15 @@ def standardTurn():
         c.log('Night', 0, 1, 0)
 
         # ************** WEREWOLVES ************************
+        c.allow(wolves)
         if len(wolves) < 2:
             wolftalktime = 0
         c.broadcast("Werewolves, open your eyes.", c.complement(wolves, all))
         c.broadcast('Werewolves, %s, you must choose a victim. You have %d seconds to discuss. Possible victims are %s.' % (str(wolves.keys()), wolftalktime, str(sorted(all.keys()))), wolves)
         c.log('Werewolves debate', 0, 1, 0)
         # Allow real-time discussion for wolftalktime
-        time.sleep(wolftalktime)  # Controlled wait for discussion
+        c.groupChat(wolves, wolftalktime)
+        #time.sleep(wolftalktime)  # Controlled wait for discussion
         c.broadcast("Werewolves, vote.", c.complement(wolves, all))
         c.broadcast('Werewolves, you must vote on a victim to eat. You have %d seconds to vote. Valid votes are %s.' % (wolfvotetime, str(sorted(all.keys()))), wolves)
         c.log('Werewolves vote', 0, 1, 0)
@@ -239,6 +241,7 @@ def standardTurn():
                     potions[0] -= 1
 
         # ************** DAY TIME - TOWN ***********************
+        c.allow(all)
         if wolfkill:
             c.broadcast('The werewolves ate %s!' % wolfvote[0], all)
             removePlayer(wolfvote[0])
@@ -250,7 +253,8 @@ def standardTurn():
             return 1
 
         c.broadcast('It is day. Everyone, open your eyes. You have %d seconds to discuss who the werewolves are.' % towntalktime, all)
-        time.sleep(towntalktime)  # Controlled wait for discussion
+        c.groupChat(all, towntalktime)
+        #time.sleep(towntalktime)  # Controlled wait for discussion
 
         c.broadcast('Townspeople, you have %d seconds to cast your votes on who to hang. Valid votes are %s' % (townvotetime, str(sorted(all.keys()))), all)
         killedPlayer, voteType = c.poll(all, townvotetime, all.keys(), 'town', all, i['townUnanimous'], i['townSilentVote'])
@@ -362,7 +366,6 @@ def main():
 
     while len(wolves) != 0 and len(wolves) < len(all):
         listenerThread()  # Synchronously check for and handle moderator commands
-        standardTurn()  # Execute game turns as originally intended
 
         c.log('\n\n', 1, 1, 1)
         c.broadcast('*' * 50, all)
@@ -374,6 +377,7 @@ def main():
         c.log('Werewolves: ' + str(wolves.keys()), 1, 0, 1)
         c.log('Witch: ' + str(witch.keys()), 1, 0, 1)
         round += 1
+        standardTurn()  # Execute game turns as originally intended
 
     if len(wolves) == 0:
         winner = 'Townspeople win'
