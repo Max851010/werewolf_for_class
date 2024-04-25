@@ -31,11 +31,11 @@ we switch from using players[player][1] to all players' socket, and use sock.sen
 
 ### def send
 
-we encode the message by utf-8 and send it through the client socket rather than pip
+we encode the message by utf-8 and send it through the client socket
 
 ### def recv
 
-we receive the message through the client socket and decode it by utf-8
+receive the message through the input client socket and decode it by utf-8
 
 ## In client.py
 
