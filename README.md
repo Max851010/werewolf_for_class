@@ -13,6 +13,18 @@
    - Otherwise, if the data we receive is ‘ ‘ or we received a epollhup event, means the connection is closed. Then we would close the corresponding socket and unregister it from epoll
 5. Finally, when the start time is over, we leave this loop and return connections as all players
 
+### def multi_recv
+1. read the message from input player's socket and deal with these messages based on different situation(chat, vote, deathspeech)
+2. since we didn't use multithread to deal with multi_recv, there is no need to use infinity loop to run the multi_recv.
+3. compare to original multi_recv, we would need to additionally 'pass a boolean' to multi_recv means we are currently voting or not
+
+### def groupchat
+1. we get all player's socket and store it into socket_list
+2. Within the chat duration, we use select.select to track every readable socket and use multi_recv to deal these messages.
+
+### def poll
+1. since we didn't use multi thread to keep receving message from player, everytime when we call poll function, we creat a group chat and set the Boolean 'vote' as true. So that the multi_recv function know we are currently voting
+
 ### def broadcast
 
 we switch players[player][1] to details[1] (details[1] stands for the socket of the player)
