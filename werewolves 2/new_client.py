@@ -1,6 +1,7 @@
 import socket
 import sys
 import select
+import signal
 
 def connect_to_server(host='localhost', port=9999):
     """ Create a socket connection to the server """
@@ -46,8 +47,17 @@ def send(server_socket):
         print("Error sending data:", e)
         return False
 
+def signal_handler(signal, frame, server_socket):
+    """Handle SIGINT and SIGTERM to close the socket gracefully."""
+    print("\nReceived termination signal, closing connection...")
+    server_socket.sendall("CLOSE".encode())
+    server_socket.close()
+    sys.exit(0)
+
 if __name__ == '__main__':
     server_socket = connect_to_server()
+    signal.signal(signal.SIGINT, lambda s, f: signal_handler(s, f, server_socket))
+    signal.signal(signal.SIGTERM, lambda s, f: signal_handler(s, f, server_socket))
 
     print "Connected to the server. Type 'exit' to quit."
     try:

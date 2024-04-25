@@ -26,9 +26,8 @@
 
 import os
 import time
-import threading
+import signal
 import random
-from threading import Thread
 
 all = {}
 
@@ -201,6 +200,10 @@ def recv(client_socket):
     """
     try:
         data = client_socket.recv(1024)  # Adjust buffer size as needed
+        if data.decode("utf-8") == "CLOSE":
+            print "Game closes by clients"
+            os.kill(os.getpid(), signal.SIGINT)
+
         if not data:
             return None  # No data received, possibly connection is closed
         return data.decode('utf-8')  # Decode from UTF-8 to Unicode string
