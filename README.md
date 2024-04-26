@@ -66,7 +66,7 @@ use def connect_to_server to connect to server, then entering an while loop to k
 
 1. After remove multi threading, we call groupChat function and pass all werewolves' socket to let them have a discussion within the talktime
 2. Since we no longer have multi threading, there's no need to make the current thread sleep
-   -above rules also apply to townperson's groupChat
+   - Above rules also apply to townperson's discussion
 
 ### def listenerThread
 
