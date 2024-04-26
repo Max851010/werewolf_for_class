@@ -27,7 +27,7 @@ import os
 import time
 import random
 import signal
-import newCommunication as c
+import communication as c
 import threading
 
 i = {}
@@ -127,7 +127,7 @@ signal.signal(signal.SIGINT, quitGame)
 ## this part basically stay the same.
 def assign():
     global all, wolves, townspeople, witch, moderatorAssignment, moderatorAssignmentContinue, moderatorAssignmentList, moderatorAssignmentChoices
-    from newCommunication import send  # Ensure 'send' is compatible and available
+    from communication import send  # Ensure 'send' is compatible and available
 
     numPlayers = len(all.keys())
 
