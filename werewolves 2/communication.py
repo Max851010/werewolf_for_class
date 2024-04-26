@@ -26,9 +26,8 @@
 
 import os
 import time
-import threading
+import signal
 import random
-from threading import Thread
 
 all = {}
 
@@ -44,6 +43,9 @@ readVulnerability = 1
 readVulnerability_2 = 1
 imposterMode = 1
 isSilent = 1
+stop_chat = type('StopChat', (object,), {'stop': False})()
+
+
 def setVars(passedReadVulnerability, passedReadVulnerability_2,passedImposterMode, publicLogName, moderatorLogName):
     #descriptions of these variables can be seen in the config file
     global readVulnerability, readVulnerability_2,imposterMode, logName, mLogName
@@ -90,114 +92,134 @@ def allow(players):
     global allowed
     allowed = players
 
-isHandlingConnections = 1
-def handleConnections(timeTillStart, randomize):
-    global isHandlingConnections, all
+con_handle_bool = 1
 
-    f = open('names.txt', 'r').read().split('\n')[0: - 1]
-    if randomize: random.shuffle(f)
+import socket
+import select
+import random
+import time
+#socket setting
+def setup_server_socket(port=9999, max_con=100):
+    SerSoc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    SerSoc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    SerSoc.bind(('localhost', port))
+    SerSoc.listen(max_con)
+    SerSoc.setblocking(0)
+    return SerSoc
 
-    for conn in range(0, len(f)):
-        if randomize: name = f[conn]
-        else: name = 'player%s'%(str(conn))
-        #if (conn == 0):
-        #   connect(str(conn), str(name))
-        t=Thread(target = connect,args = [str(conn), str(name)])
-        t.setDaemon(True)
-        t.start()
+def handleConnections(Start_T, randomize):
+    global con_handle_bool, all
 
-    sleep(int(timeTillStart))
-    isHandlingConnections = 0
-    all = conns
-    return conns
+    # Read names from file
+    names = []
+    with open('names.txt', 'r') as file:
+        names = file.read().splitlines()
+    if randomize:
+        random.shuffle(names)
 
-def connect(num, name):
-    #global isHandlingConnections
+    # server socket with epoll!!
+    epoll = select.epoll()
+    SerSoc = setup_server_socket()
+    epoll.register(SerSoc.fileno(), select.EPOLLIN)
 
-    inPipe = '%stos'%num
-    outPipe = 'sto%s'%num
-    duration = .1
-
-    connected = False
-    connInput = ''
     try:
-        while not connected:#connInput!='connect':
-            try: connInput = recv(inPipe)[2]
-            except Exception, p: pass
+        conns = {}
+        addr = {}
+        dataIN = {}
+        con_handle_bool = True
+        start_time = time.time()
 
-            if connInput == 'connect' and isHandlingConnections:
-                log('%s connected'%name, 1, 0, 1)
-                send('Hello, %s.  You are connected.  Please wait for the game to start.'%name, outPipe)
-                conns[name] = [inPipe, outPipe]
-                connected = True
-            elif not isHandlingConnections:
-                duration = 1
-                send('Game already started.  Please wait for next game.', outPipe)
-                send('close', outPipe)
-            time.sleep(duration)
-    except:
-        pass
+        while con_handle_bool and time.time() - start_time < Start_T:
+            events = epoll.poll(1)
+            ##go through
+            for filenum, event in events:
+                if filenum == SerSoc.fileno():
+                    connection, address = SerSoc.accept()
+                    connection.setblocking(0)
+                    fd = connection.fileno()
+                    epoll.register(fd, select.EPOLLIN)
+                    conns[fd] = connection
+                    addr[fd] = address
+                    dataIN[fd] = ''
+                elif event & select.EPOLLIN:
+                    data = conns[filenum].recv(1024).decode('utf-8')
+                    if data:
+                        dataIN[filenum] += data
+                        if 'connect' in dataIN[filenum]:
+                            name_index = int(addr[filenum][1]) % len(names)
+                            name = names[name_index]
+                            #message = "Hello, {}. You are connected. Please wait for the game to start.".format(name)
+                            message = "Hello, '%s'. You are connected. Please wait for the game to start." % str(filenum)
+                            conns[filenum].sendall(message.encode('utf-8'))
+                            epoll.modify(filenum, select.EPOLLOUT)
+                    else:
+                        epoll.unregister(filenum)
+                        conns[filenum].close()
+                        del conns[filenum]
+                elif event & select.EPOLLOUT:
+                    conns[filenum].sendall("Message to send".encode('utf-8'))
+                    epoll.modify(filenum, 0)
+                elif event & select.EPOLLHUP:
+                    epoll.unregister(filenum)
+                    conns[filenum].close()
+                    del conns[filenum]
+        con_handle_bool = False
+        all = conns
+    finally:
+        epoll.unregister(SerSoc.fileno())
+        epoll.close()
+        SerSoc.close()
+    return all
 
+###############################
 
-def broadcast(msg, players):
-    global logChat
-    log(msg, 1, logChat, 1)
-
-    time.sleep(.1)
-
-    for player in players.keys():
+##broadcast with socket
+def broadcast(message, everysockets):
+    """
+    Send a message to all clients except the sender.
+    """
+    for sock in everysockets.values():
         try:
-            send(msg, players[player][1])
-        except Exception, p: pass
-        #log('broadcast error:%s'%p,1,0,1)
+            sock.send(message.encode('utf-8'))
+        except Exception as e:
+            print("Broadcast failed to", sock, "with error", e)
 
-
-def send(msg, pipe):
+def send(msg, client_soc):
+    """Send a message to the client through the socket."""
     if readVulnerability_2 != 0:
-        # Hopefully don't need this filtering now that the vulnerability below is fixed...
+        #  injection or vulnerabilities? nope.
         msg = msg.replace("'", '').replace(';', '').replace('"', '').replace('\n', '').replace('(', '[').replace(')', ']').replace('>', '').replace('<', '').replace(':', '')
 
     try:
-        sender = pipe.split('to')[0]
+        # msg form:
+        # msg = ':' + 'sender' + ':' + msg + '\n'
+        client_soc.sendall(msg.encode('utf-8'))
+    except Exception as e:
+        print 'send error: %s' % str(e)
+    #if len(msg)!=0:
+      #          msg='(echo :%s:%s > %s%sD/%s) 2> /dev/null &'%(sender,msg,pipeRoot,pipe,pipe)
+       #         o=os.popen(msg)
 
-        if readVulnerability_2 == 0:
-            f = open(pipeRoot + pipe + 'D/' + pipe, 'w')
-            f.write(':' + sender + ':' + msg + '\n')
-            f.flush()
-            f.close()
-        else:
-            # This commented code is a vulnerability similar to readVulnerability
-            if len(msg)!=0:
-                msg='(echo :%s:%s > %s%sD/%s) 2> /dev/null &'%(sender,msg,pipeRoot,pipe,pipe)
-                o=os.popen(msg)
-
-    except Exception, p:
-        pass
-    #log('send error:%s'%p,1,0,1)
-
-def recv(pipe):
-    global readVulnerability, imposterMode
+def recv(client_soc):
+    """
+    Receive data from the socket. The data is decoded from UTF-8 to Unicode.
+    """
     try:
-        if readVulnerability == 0:
-            f = open('%s%sD/%s'%(pipeRoot, pipe, pipe), 'r')
-        else:
-            msg = '(cat %s%sD/%s)2>/dev/null'%(pipeRoot, pipe, pipe)
-            f = os.popen(msg)
-        output = f.read().split('\n')
-        f.close()
+        data = client_soc.recv(1024)  # Adjust buffer size as needed
+        if data.decode("utf-8") == "CLOSE":
+            print "Game closes by clients"
+            os.kill(os.getpid(), signal.SIGINT)
 
-        for i in range(len(output)):
-            if len(output[i]) > 0:
-                output[i] = output[i].split(':')
-                out = pipe.split('to')[0]
-                if (output[i][1] == 's' or output[i][1] == out or imposterMode == 1):
-                    return output[i]
-    except Exception, p:
-        log('receive error:%s'%p, 0, 0, 0)
-        pass
+        if not data:
+            return None  # No data received, possibly connection is closed
+        return data.decode('utf-8')  # Decode from UTF-8 to Unicode string
+    except socket.error as e:
+        print "Socket error:", e##log('receive error:%s'%p, 0, 0, 0)
+        return None
 
 
 #print, publicLog, modLog
+##only for vote and poll now.
 def log(msg, printBool, publicLogBool, moderatorLogBool):
     global logName, mLogName
 
@@ -223,45 +245,72 @@ def clear(pipes):
 
 deathspeech = 0
 deadGuy = ""
-def multiRecv(player, players):
-    global allowed, voters, targets, deathspeech, deadGuy, all
+import socket
+import select
+import time
 
-    while 1:
-        msg = recv(all[player][0])
-        if msg == None: continue
+def multiRecv(theOne_soc, clientsoc, clientid, toVote=False):
+    """
+    Process incoming messages from a specific player's socket.
+    """
+    global deathspeech, deadGuy, voters, allowed  #  globally defined
+    
+    try:
+        message = recv(theOne_soc)  # recv handles decoding
+        if message:
+            ##same cat
+            if deathspeech and clientid == deadGuy:
+                print str(clientid), "'s deathspeech: ", message
+                broadcast("%s-%s" % (clientid, message), modPlayers(clientid, clientsoc))
+            elif (toVote==True) or (votetime and clientid in voters):
+                print str(clientid), "votes", message
+                vote(clientid, message)
+            elif clientid in allowed:
+                print "allowed msg: %s" % message
+                broadcast("%s-%s" % (clientid, message), modPlayers(clientid, clientsoc))
+            else:
+                print "Else msg: ", message
+    except Exception as e:
+        print "Error handling message for %s: %s" % (clientid, e)
 
-        #if someones giving a deathspeech
-        if deathspeech and player == deadGuy:
-            broadcast('%s-%s'%(player, msg[2]), modPlayers(player, all))
+def groupChat(clientsoc, chat_duration, toVote=False):
+    """
+    Handle group chat using select for efficient I/O multiplexing, with time control.
+    """
+    global stop_chat
+    print "Group Chat started"
+    sockets_list = list(clientsoc.values())
+    client_ids = {sock.fileno(): oneid for oneid, sock in clientsoc.items()}
+    start_time = time.time()
+    ##make sure time limit
+    try:
+        while (time.time() - start_time) < chat_duration:
+            read_sockets, _, _ = select.select(sockets_list, [], [], 0.1)
 
-        #if were voting
-        elif votetime and player in voters.keys():
-            vote(player, msg[2])
+            for notified_socket in read_sockets:
+                oneid = client_ids[notified_socket.fileno()]
+                if toVote:
+                    multiRecv(notified_socket, clientsoc, oneid, True)
+                else:
+                    multiRecv(notified_socket, clientsoc, oneid, False)
 
-        #if its group chat
-        elif player in allowed:
-            broadcast('%s-%s'%(player, msg[2]), modPlayers(player, allowed))
+    finally:
+        print "Chat session ended."
 
-        #otherwise prevent spam
-        else:
-            time.sleep(1)
+def close_groupChat():
+    """
+    Signal to close the group chat using the global stop_chat variable.
+    """
+    global stop_chat
+    stop_chat.stop = True
 
-def groupChat(players):
-    for player in players.keys():
-        newPlayers = modPlayers(player, players)
-        t=Thread(target = multiRecv, args = [player, newPlayers])
-        t.setDaemon(True)
-        t.start()
+def modPlayers(exclude_player, clientsoc):
+    """
+    Modify the list of players to exclude the sender from receiving their own messages.
+    """
+    return {p: s for p, s in clientsoc.items() if p != exclude_player}
 
-#remove one pipe from pipes
-def modPlayers(player, players):
-    newPlayers = {}
-    for p in players.keys():
-        if p != player:
-            newPlayers[p] = players[p]
-    return newPlayers
 
-#voteAllowDict is a dictionary of booleans that forces only one group to vote at a time.
 votetime = 0
 voteAllowDict = {'w':0, 'W':0, 't':0}
 votes = {}
@@ -273,6 +322,7 @@ character = ""
 # Global dictionary to determine if user has voted
 voter_targets = {}
 
+##everthing might stay the same except using groupChat
 def poll(passedVoters, duration, passedValidTargets, passedCharacter, everyone, isUnanimous, passedIsSilent):
     global votes, voteAllowDict, allowed, votesReceived, logChat, votetime, voters, targets, character, isSilent, voter_targets
 
@@ -286,11 +336,12 @@ def poll(passedVoters, duration, passedValidTargets, passedCharacter, everyone, 
 
     voter_targets = {}
 
-    sleep(duration + 1)
+    #sleep(duration + 1)
     log(str(votes), 1, logChat, 1)
 
     results = []
     mode = 0
+    groupChat(passedVoters, duration + 1, True)
     for v in votes.keys():
         if votes[v] > mode:
             mode = votes[v]
@@ -314,27 +365,29 @@ def poll(passedVoters, duration, passedValidTargets, passedCharacter, everyone, 
 
     return results, resultType
 
+##this part can remain the same. no new method needed.
 def vote(voter, target):
     global votes, votesReceived, voters, character, isSilent, voter_targets
 
     # Code Updated on 7/20 by Tim
     if voter_targets.get(voter, None) == None:  # Added line
 
-        if target in targets:
+        unicode_targets = [unicode(t) for t in targets]
+        if target in unicode_targets:
             try: votes[target] += 1  # changed from += 1 to just 1
             except: votes[target] = 1
             #message[0] is sent to who[0]; message[1] sent to who[1]; etc.
             messages = []
             who = []
 
-            log(voter + " voted for " + target, 1, 0, 1)
+            log(str(voter) + " voted for " + str(target), 1, 0, 1)
 
             if character == "witch":
                 messages.append("Witch voted")
                 who.append(all)
             elif character == "wolf":
                 if isSilent: messages.append('%s voted.'%voter)
-                else: messages.append('%s voted for %s'%(voter, target))
+                else: messages.append('%s voted for %s'%(voter, str(target)))
                 #messages.append("Wolf vote received.")
                 who.append(voters)
 
@@ -344,7 +397,7 @@ def vote(voter, target):
                 #who.append(complement(voters,all))
             else:#townsperson vote
                 if isSilent: messages.append('%s voted.'%voter)
-                else: messages.append('%s voted for %s'%(voter, target))
+                else: messages.append('%s voted for %s'%(voter, str(target)))
                 who.append(all)
 
             for i in range(len(messages)):
@@ -358,18 +411,18 @@ def vote(voter, target):
 
         else:
             #vote_targets[voter] = None  # Added by Tim
-            send('invalid vote: %s'%target, voters[voter][1])
+            send('invalid vote: %s'%str(target), voters[voter])
 
     # Added by Tim    
     else:
-        send('You already voted: %s'%target, voters[voter][1])
+        send('You already voted: %s'%str(target), voters[voter])
 
-def spawnDeathSpeech(player, endtime):
+def spawnDeathSpeech(player, players, endtime):
     global deathspeech, deadGuy
     deathspeech = 1
     deadGuy = player
 
-    sleep(endtime)
+    groupChat(players, endtime)
 
     deathspeech = 0
     deadGuy = ""
