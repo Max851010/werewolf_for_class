@@ -148,7 +148,8 @@ def handleConnections(Start_T, randomize):
                         if 'connect' in dataIN[filenum]:
                             name_index = int(addr[filenum][1]) % len(names)
                             name = names[name_index]
-                            message = "Hello, {}. You are connected. Please wait for the game to start.".format(name)
+                            #message = "Hello, {}. You are connected. Please wait for the game to start.".format(name)
+                            message = "Hello, '%s'. You are connected. Please wait for the game to start." % str(filenum)
                             conns[filenum].sendall(message.encode('utf-8'))
                             epoll.modify(filenum, select.EPOLLOUT)
                     else:

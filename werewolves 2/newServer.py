@@ -235,7 +235,6 @@ def standardTurn():
                 witchmoves = validKills + ['Heal', 'Pass'] if potions[1] else validKills
                 ##index error
                 c.send('Witch, wake up. The wolves killed %s. Valid votes are %s.' % (str(wolfvote[0]), str(witchmoves)), witch[witchPlayer])
-                witchvotetime = 9
                 witchVote, voteType = c.poll(witch, witchvotetime, witchmoves, 'witch', all, 0, 0)
                 if witchVote == ['Heal']:
                     c.send('The Witch healed you!\n', all[int(wolfvote[0])])
@@ -258,11 +257,9 @@ def standardTurn():
             return 1
 
         c.broadcast('It is day. Everyone, open your eyes. You have %d seconds to discuss who the werewolves are.' % towntalktime, all)
-        towntalktime = 9
         c.groupChat(all, towntalktime)
         #time.sleep(towntalktime)  # Controlled wait for discussion
 
-        townvotetime = 9
         c.broadcast('Townspeople, you have %d seconds to cast your votes on who to hang. Valid votes are %s' % (townvotetime, str(sorted(all.keys()))), all)
         killedPlayer, voteType = c.poll(all, townvotetime, all.keys(), 'town', all, i['townUnanimous'], i['townSilentVote'])
         if voteType == 0:
@@ -376,10 +373,10 @@ def main():
         listenerThread()  # Synchronously check for and handle moderator commands
 
         c.log('\n\n', 1, 1, 1)
-        c.broadcast('*' * 50, all)
-        c.broadcast('*' * 21 + 'ROUND ' + str(round) + '*' * 22, all)
-        c.broadcast('*' * 15 + str(len(all)) + ' players remain.' + '*' * 18, all)
-        c.broadcast('*' * 50, all)
+        c.broadcast('*' * 50+'\n', all)
+        c.broadcast('*' * 21 + 'ROUND ' + str(round) + '*' * 22+'\n', all)
+        c.broadcast('*' * 15 + str(len(all)) + ' players remain.' + '*' * 18+'\n', all)
+        c.broadcast('*' * 50+'\n', all)
         c.log('Round ' + str(round), 0, 1, 0)
         c.log('Townspeople: ' + str(all.keys()), 1, 1, 1)
         c.log('Werewolves: ' + str(wolves.keys()), 1, 0, 1)
