@@ -8,6 +8,11 @@
 2. Chi-Ao, Chen
 3. Pei-Hung Tsai
 4. Ying-Yu Wu
+
+
+## How to run the game
+you can simply run `python2 server.py` and `python2 client.py` after `bash install.sh`, because we use socket and epoll to handle this. It's default ip is localhost.
+
 ## In Communication.py
 
 ### def handleConnections
