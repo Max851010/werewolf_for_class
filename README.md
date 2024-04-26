@@ -1,4 +1,9 @@
 # Werewolf using epoll()
+Team member:
+1. Cheng Yen, Tsai
+2. Chi-Ao, Chen
+3. Pei-Hung Tsai
+4. Ying-Yu Wu
 ## In Communication.py
 
 ### def handleConnections
