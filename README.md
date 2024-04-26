@@ -55,3 +55,19 @@ entering a infinity while loop to recevie and print every message from the serve
 ### main
 
 use def connect_to_server to connect to server, then entering an while loop to keep track message from server and user's input text
+
+## In server.py
+
+### def remove player
+
+1. change the integer InTownperson to a Boolean, basic logic is the same
+
+### def StandardTurn
+
+1. After remove multi threading, we call groupChat function and pass all werewolves' socket to let them have a discussion within the talktime
+2. Since we no longer have multi threading, there's no need to make the current thread sleep
+   -above rules also apply to townperson's groupChat
+
+### def listenerThread
+
+1. use select.select to check whether there's any readable input in standard input
