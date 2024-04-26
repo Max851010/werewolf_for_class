@@ -71,3 +71,10 @@ use def connect_to_server to connect to server, then entering an while loop to k
 ### def listenerThread
 
 1. use select.select to check whether there's any readable input in standard input
+
+## Disconnection handling
+
+if there's anyone in the game disconnect, we deel with this event by these three condition
+1. if the character is currently in his turn(ex: a wolf disconnected when wolves is voting), then the game would over immediately.
+2. if the character is not in his turn(ex: a townperson disconnected when wolves is voting), then the game would over when it turn to townperson's discussion
+3. if the character is a dead person, then the game would continue without any impact.
