@@ -70,7 +70,7 @@ witch = {}
 potions = [int(i['kill']), int(i['heal'])]#[kill,heal]
 
 round = 1
-
+##remain log using
 def removePlayer(player):
     global all, wolves, witch, logChat
     isTownsperson = True
@@ -106,6 +106,7 @@ def removePlayer(player):
 
 gameNumber = 9999
 winner = 'No winner'
+##remain log using
 def quitGame(signal, frame):
     global all, winner, gameNumber
     try:
@@ -123,6 +124,7 @@ def quitGame(signal, frame):
 
 signal.signal(signal.SIGINT, quitGame)
 
+## this part basically stay the same.
 def assign():
     global all, wolves, townspeople, witch, moderatorAssignment, moderatorAssignmentContinue, moderatorAssignmentList, moderatorAssignmentChoices
     from newCommunication import send  # Ensure 'send' is compatible and available
@@ -231,6 +233,7 @@ def standardTurn():
             if wolfkill:
                 validKills = [p for p in all if p != wolfvote[0]]
                 witchmoves = validKills + ['Heal', 'Pass'] if potions[1] else validKills
+                ##index error
                 c.send('Witch, wake up. The wolves killed %s. Valid votes are %s.' % (str(wolfvote[0]), str(witchmoves)), witch[witchPlayer])
                 witchvotetime = 9
                 witchVote, voteType = c.poll(witch, witchvotetime, witchmoves, 'witch', all, 0, 0)
@@ -323,6 +326,7 @@ def listenerThread():
                     print '*** Start your message with "all", "wolves", or "witch". ***'
     except Exception as e:
         print 'Error reading moderator input:', str(e)
+        #time.sleep(.1)
 
 
 publicLogName = ''

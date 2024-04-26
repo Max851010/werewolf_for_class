@@ -92,23 +92,23 @@ def allow(players):
     global allowed
     allowed = players
 
-isHandlingConnections = 1
+con_handle_bool = 1
 
 import socket
 import select
 import random
 import time
+#socket setting
+def setup_server_socket(port=9999, max_con=100):
+    SerSoc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    SerSoc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    SerSoc.bind(('localhost', port))
+    SerSoc.listen(max_con)
+    SerSoc.setblocking(0)
+    return SerSoc
 
-def setup_server_socket(port=9999, max_connections=100):
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_socket.bind(('localhost', port))
-    server_socket.listen(max_connections)
-    server_socket.setblocking(0)
-    return server_socket
-
-def handleConnections(timeTillStart, randomize):
-    global isHandlingConnections, all
+def handleConnections(Start_T, randomize):
+    global con_handle_bool, all
 
     # Read names from file
     names = []
@@ -117,89 +117,94 @@ def handleConnections(timeTillStart, randomize):
     if randomize:
         random.shuffle(names)
 
-    # Setup server socket
+    # server socket with epoll!!
     epoll = select.epoll()
-    server_socket = setup_server_socket()
-    epoll.register(server_socket.fileno(), select.EPOLLIN)
+    SerSoc = setup_server_socket()
+    epoll.register(SerSoc.fileno(), select.EPOLLIN)
 
     try:
-        connections = {}
-        addresses = {}
-        data_received = {}
-        isHandlingConnections = True
+        conns = {}
+        addr = {}
+        dataIN = {}
+        con_handle_bool = True
         start_time = time.time()
 
-        while isHandlingConnections and time.time() - start_time < timeTillStart:
+        while con_handle_bool and time.time() - start_time < Start_T:
             events = epoll.poll(1)
-            for fileno, event in events:
-                if fileno == server_socket.fileno():
-                    connection, address = server_socket.accept()
+            ##go through
+            for filenum, event in events:
+                if filenum == SerSoc.fileno():
+                    connection, address = SerSoc.accept()
                     connection.setblocking(0)
                     fd = connection.fileno()
                     epoll.register(fd, select.EPOLLIN)
-                    connections[fd] = connection
-                    addresses[fd] = address
-                    data_received[fd] = ''
+                    conns[fd] = connection
+                    addr[fd] = address
+                    dataIN[fd] = ''
                 elif event & select.EPOLLIN:
-                    data = connections[fileno].recv(1024).decode('utf-8')
+                    data = conns[filenum].recv(1024).decode('utf-8')
                     if data:
-                        data_received[fileno] += data
-                        if 'connect' in data_received[fileno]:
-                            name_index = int(addresses[fileno][1]) % len(names)
+                        dataIN[filenum] += data
+                        if 'connect' in dataIN[filenum]:
+                            name_index = int(addr[filenum][1]) % len(names)
                             name = names[name_index]
                             message = "Hello, {}. You are connected. Please wait for the game to start.".format(name)
-                            connections[fileno].sendall(message.encode('utf-8'))
-                            epoll.modify(fileno, select.EPOLLOUT)
+                            conns[filenum].sendall(message.encode('utf-8'))
+                            epoll.modify(filenum, select.EPOLLOUT)
                     else:
-                        epoll.unregister(fileno)
-                        connections[fileno].close()
-                        del connections[fileno]
+                        epoll.unregister(filenum)
+                        conns[filenum].close()
+                        del conns[filenum]
                 elif event & select.EPOLLOUT:
-                    connections[fileno].sendall("Message to send".encode('utf-8'))
-                    epoll.modify(fileno, 0)
+                    conns[filenum].sendall("Message to send".encode('utf-8'))
+                    epoll.modify(filenum, 0)
                 elif event & select.EPOLLHUP:
-                    epoll.unregister(fileno)
-                    connections[fileno].close()
-                    del connections[fileno]
-        isHandlingConnections = False
-        all = connections
+                    epoll.unregister(filenum)
+                    conns[filenum].close()
+                    del conns[filenum]
+        con_handle_bool = False
+        all = conns
     finally:
-        epoll.unregister(server_socket.fileno())
+        epoll.unregister(SerSoc.fileno())
         epoll.close()
-        server_socket.close()
+        SerSoc.close()
     return all
 
 ###############################
 
-def broadcast(message, players_sockets):
+##broadcast with socket
+def broadcast(message, everysockets):
     """
     Send a message to all clients except the sender.
     """
-    for sock in players_sockets.values():
+    for sock in everysockets.values():
         try:
             sock.send(message.encode('utf-8'))
         except Exception as e:
             print("Broadcast failed to", sock, "with error", e)
 
-def send(msg, client_socket):
+def send(msg, client_soc):
     """Send a message to the client through the socket."""
     if readVulnerability_2 != 0:
-        # Sanitize message to avoid potential injection or other vulnerabilities
+        #  injection or vulnerabilities? nope.
         msg = msg.replace("'", '').replace(';', '').replace('"', '').replace('\n', '').replace('(', '[').replace(')', ']').replace('>', '').replace('<', '').replace(':', '')
 
     try:
-        # Prepare message in a format suitable for sending
-        #msg = ':' + 'sender' + ':' + msg + '\n'
-        client_socket.sendall(msg.encode('utf-8'))
+        # msg form:
+        # msg = ':' + 'sender' + ':' + msg + '\n'
+        client_soc.sendall(msg.encode('utf-8'))
     except Exception as e:
         print 'send error: %s' % str(e)
+    #if len(msg)!=0:
+      #          msg='(echo :%s:%s > %s%sD/%s) 2> /dev/null &'%(sender,msg,pipeRoot,pipe,pipe)
+       #         o=os.popen(msg)
 
-def recv(client_socket):
+def recv(client_soc):
     """
     Receive data from the socket. The data is decoded from UTF-8 to Unicode.
     """
     try:
-        data = client_socket.recv(1024)  # Adjust buffer size as needed
+        data = client_soc.recv(1024)  # Adjust buffer size as needed
         if data.decode("utf-8") == "CLOSE":
             print "Game closes by clients"
             os.kill(os.getpid(), signal.SIGINT)
@@ -208,11 +213,12 @@ def recv(client_socket):
             return None  # No data received, possibly connection is closed
         return data.decode('utf-8')  # Decode from UTF-8 to Unicode string
     except socket.error as e:
-        print "Socket error:", e
+        print "Socket error:", e##log('receive error:%s'%p, 0, 0, 0)
         return None
 
 
 #print, publicLog, modLog
+##only for vote and poll now.
 def log(msg, printBool, publicLogBool, moderatorLogBool):
     global logName, mLogName
 
@@ -242,49 +248,50 @@ import socket
 import select
 import time
 
-def multiRecv(player_socket, players_sockets, player_id, toVote=False):
+def multiRecv(theOne_soc, clientsoc, clientid, toVote=False):
     """
     Process incoming messages from a specific player's socket.
     """
-    global deathspeech, deadGuy, voters, allowed  # Assuming these are globally defined
+    global deathspeech, deadGuy, voters, allowed  #  globally defined
     
     try:
-        message = recv(player_socket)  # Assumes recv handles decoding
+        message = recv(theOne_soc)  # recv handles decoding
         if message:
-            if deathspeech and player_id == deadGuy:
-                print str(player_id), "'s deathspeech: ", message
-                broadcast("%s-%s" % (player_id, message), modPlayers(player_id, players_sockets))
-            elif (toVote==True) or (votetime and player_id in voters):
-                print str(player_id), "votes", message
-                vote(player_id, message)
-            elif player_id in allowed:
+            ##same cat
+            if deathspeech and clientid == deadGuy:
+                print str(clientid), "'s deathspeech: ", message
+                broadcast("%s-%s" % (clientid, message), modPlayers(clientid, clientsoc))
+            elif (toVote==True) or (votetime and clientid in voters):
+                print str(clientid), "votes", message
+                vote(clientid, message)
+            elif clientid in allowed:
                 print "allowed msg: %s" % message
-                broadcast("%s-%s" % (player_id, message), modPlayers(player_id, players_sockets))
+                broadcast("%s-%s" % (clientid, message), modPlayers(clientid, clientsoc))
             else:
                 print "Else msg: ", message
     except Exception as e:
-        print "Error handling message for %s: %s" % (player_id, e)
+        print "Error handling message for %s: %s" % (clientid, e)
 
-def groupChat(players_sockets, chat_duration, toVote=False):
+def groupChat(clientsoc, chat_duration, toVote=False):
     """
     Handle group chat using select for efficient I/O multiplexing, with time control.
     """
     global stop_chat
     print "Group Chat started"
-    sockets_list = list(players_sockets.values())
-    player_ids = {sock.fileno(): player_id for player_id, sock in players_sockets.items()}
+    sockets_list = list(clientsoc.values())
+    client_ids = {sock.fileno(): oneid for oneid, sock in clientsoc.items()}
     start_time = time.time()
-
+    ##make sure time limit
     try:
         while (time.time() - start_time) < chat_duration:
             read_sockets, _, _ = select.select(sockets_list, [], [], 0.1)
 
             for notified_socket in read_sockets:
-                player_id = player_ids[notified_socket.fileno()]
+                oneid = client_ids[notified_socket.fileno()]
                 if toVote:
-                    multiRecv(notified_socket, players_sockets, player_id, True)
+                    multiRecv(notified_socket, clientsoc, oneid, True)
                 else:
-                    multiRecv(notified_socket, players_sockets, player_id, False)
+                    multiRecv(notified_socket, clientsoc, oneid, False)
 
     finally:
         print "Chat session ended."
@@ -296,11 +303,11 @@ def close_groupChat():
     global stop_chat
     stop_chat.stop = True
 
-def modPlayers(exclude_player, players_sockets):
+def modPlayers(exclude_player, clientsoc):
     """
     Modify the list of players to exclude the sender from receiving their own messages.
     """
-    return {p: s for p, s in players_sockets.items() if p != exclude_player}
+    return {p: s for p, s in clientsoc.items() if p != exclude_player}
 
 
 votetime = 0
@@ -314,6 +321,7 @@ character = ""
 # Global dictionary to determine if user has voted
 voter_targets = {}
 
+##everthing might stay the same except using groupChat
 def poll(passedVoters, duration, passedValidTargets, passedCharacter, everyone, isUnanimous, passedIsSilent):
     global votes, voteAllowDict, allowed, votesReceived, logChat, votetime, voters, targets, character, isSilent, voter_targets
 
@@ -356,6 +364,7 @@ def poll(passedVoters, duration, passedValidTargets, passedCharacter, everyone, 
 
     return results, resultType
 
+##this part can remain the same. no new method needed.
 def vote(voter, target):
     global votes, votesReceived, voters, character, isSilent, voter_targets
 

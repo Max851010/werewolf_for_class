@@ -3,25 +3,26 @@ import sys
 import select
 import signal
 
+##socket
 def connect_to_server(host='localhost', port=9999):
     """ Create a socket connection to the server """
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    clientsoc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        client_socket.connect((host, port))
-        client_socket.setblocking(0)  # Set the socket to non-blocking
-        client_socket.sendall("connect")
-        return client_socket
+        clientsoc.connect((host, port))
+        clientsoc.setblocking(0)  # Set the socket to non-blocking
+        clientsoc.sendall("connect")
+        return clientsoc
     except socket.error as e:
         print "Failed to connect to the server:", e
         sys.exit()
 
-def listen(server_socket):
+def listen(server_soc):
     """ Check for messages from the server """
     try:
         while True:
-            ready_to_read, _, _ = select.select([server_socket], [], [], 0.5)
-            if server_socket in ready_to_read:
-                data = server_socket.recv(1024).decode()
+            ready_cli, _, _ = select.select([server_soc], [], [], 0.5)
+            if server_soc in ready_cli:
+                data = server_soc.recv(1024).decode()
                 if not data:
                     print "Connection closed by the server."
                     return False
@@ -32,14 +33,14 @@ def listen(server_socket):
         print "Error receiving data:", e
         return False
 
-def send(server_socket):
+def send(server_soc):
     """Send a message entered by the user."""
     try:
-        ready_to_write, _, _ = select.select([sys.stdin], [], [], 0.1)
-        if ready_to_write:
+        readyy, _, _ = select.select([sys.stdin], [], [], 0.1)
+        if readyy:
             msg = sys.stdin.readline().strip()  # Read a line from stdin without blocking the program
             if msg:
-                server_socket.sendall(msg.encode())
+                server_soc.sendall(msg.encode())
                 if msg.lower() == 'exit':
                     return False
         return True
@@ -47,27 +48,28 @@ def send(server_socket):
         print("Error sending data:", e)
         return False
 
-def signal_handler(signal, frame, server_socket):
+##for close
+def signal_handler(signal, frame, server_soc):
     """Handle SIGINT and SIGTERM to close the socket gracefully."""
     print("\nReceived termination signal, closing connection...")
-    server_socket.sendall("CLOSE".encode())
-    server_socket.close()
+    server_soc.sendall("CLOSE".encode())
+    server_soc.close()
     sys.exit(0)
 
 if __name__ == '__main__':
-    server_socket = connect_to_server()
-    signal.signal(signal.SIGINT, lambda s, f: signal_handler(s, f, server_socket))
-    signal.signal(signal.SIGTERM, lambda s, f: signal_handler(s, f, server_socket))
+    server_soc = connect_to_server()
+    signal.signal(signal.SIGINT, lambda s, f: signal_handler(s, f, server_soc))
+    signal.signal(signal.SIGTERM, lambda s, f: signal_handler(s, f, server_soc))
 
-    print "Connected to the server. Type 'exit' to quit."
+    print "Connected. Type 'exit' to quit."
     try:
         while True:
-            # Use select to check for input readiness on both stdin and the socket
-            if not listen(server_socket):  # Listen for incoming messages
+            
+            if not listen(server_soc):  # Listen for incoming messages
                 break
-            if not send(server_socket):  # Check for user input and send messages
+            if not send(server_soc):  # Check for user input and send messages
                 break
     finally:
-        server_socket.close()
-        print "Disconnected from the server."
+        server_soc.close()
+        print "Disconnected !!"
 
