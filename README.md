@@ -1,4 +1,7 @@
 # Werewolf using epoll()
+
+## we allow professor to use our code in future offerings of 536 or other courses
+
 ## Team member:
 
 1. Cheng Yen, Tsai
